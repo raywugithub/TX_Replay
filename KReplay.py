@@ -129,13 +129,16 @@ class KLinePlayer(QMainWindow):
                 artist.remove()
             
             # 添加新標籤
-            self.ax1.text(0.01, 0.95, f'最高價: {current_high:.2f}', 
+            self.ax1.text(0.01, 0.95, f'INT: {current_high-current_low:.2f}', 
+                         transform=self.ax1.transAxes, color='orange',
+                         bbox=dict(facecolor='white', alpha=0.7))
+            self.ax1.text(0.01, 0.90, f'HIGH: {current_high:.2f}', 
                          transform=self.ax1.transAxes, color='red',
                          bbox=dict(facecolor='white', alpha=0.7))
-            self.ax1.text(0.01, 0.90, f'最低價: {current_low:.2f}', 
+            self.ax1.text(0.01, 0.85, f'LOW: {current_low:.2f}', 
                          transform=self.ax1.transAxes, color='green',
                          bbox=dict(facecolor='white', alpha=0.7))
-            self.ax1.text(0.01, 0.85, f'最新收盤價: {current_close:.2f}', 
+            self.ax1.text(0.01, 0.80, f'Close: {current_close:.2f}', 
                          transform=self.ax1.transAxes, color='blue',
                          bbox=dict(facecolor='white', alpha=0.7))
 
