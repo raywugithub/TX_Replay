@@ -2,7 +2,7 @@ import sys
 import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, 
                              QPushButton, QHBoxLayout, QFileDialog, QLabel, 
-                             QTextEdit, QSplitter)
+                             QTextEdit, QSplitter, QMessageBox, QSpinBox)
 from PyQt5.QtCore import QTimer, Qt
 import mplfinance as mpf
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -14,14 +14,14 @@ from datetime import datetime
 class KLinePlayer(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('股票K線模擬交易訓練軟體 (含點數計算)')
+        self.setWindowTitle('股票K線模擬交易訓練軟體 (含速度調整)')
         self.setGeometry(100, 100, 1200, 900)
         
         # 數據相關變量
         self.df = None
         self.current_idx = 0
         self.playing = False
-        self.speed = 500
+        self.speed = 500  # 預設播放速度(毫秒)
         
         # 交易相關變量
         self.trades = []
@@ -54,8 +54,11 @@ class KLinePlayer(QMainWindow):
         control_panel = QWidget()
         control_layout = QHBoxLayout()
         
-        self.load_btn = QPushButton('載入數據')
+        self.load_btn = QPushButton('載入K線數據')
         self.load_btn.clicked.connect(self.load_data)
+        
+        self.calc_avg_btn = QPushButton('計算均價')
+        self.calc_avg_btn.clicked.connect(self.calculate_average_price)
         
         self.play_btn = QPushButton('開始')
         self.play_btn.clicked.connect(self.toggle_play)
@@ -77,15 +80,23 @@ class KLinePlayer(QMainWindow):
         self.result_btn.clicked.connect(self.show_results)
         self.result_btn.setEnabled(False)
         
-        self.speed_label = QLabel(f'速度: {self.speed}ms')
+        # 速度調整控制
+        self.speed_label = QLabel('速度(ms):')
+        self.speed_spinbox = QSpinBox()
+        self.speed_spinbox.setRange(100, 5000)  # 設置範圍100-5000毫秒
+        self.speed_spinbox.setValue(self.speed)
+        self.speed_spinbox.setSingleStep(100)  # 每次增減100毫秒
+        self.speed_spinbox.valueChanged.connect(self.update_speed)
         
         control_layout.addWidget(self.load_btn)
+        control_layout.addWidget(self.calc_avg_btn)
         control_layout.addWidget(self.play_btn)
         control_layout.addWidget(self.step_btn)
         control_layout.addWidget(self.buy_btn)
         control_layout.addWidget(self.sell_btn)
         control_layout.addWidget(self.result_btn)
         control_layout.addWidget(self.speed_label)
+        control_layout.addWidget(self.speed_spinbox)
         control_layout.addStretch()
         
         control_panel.setLayout(control_layout)
@@ -116,7 +127,62 @@ class KLinePlayer(QMainWindow):
         
         self.timer = QTimer()
         self.timer.timeout.connect(self.next_step)
+    
+    def update_speed(self, value):
+        """更新播放速度"""
+        self.speed = value
+        if self.playing:
+            self.timer.setInterval(self.speed)
+        self.log_trade(f"播放速度已調整為: {self.speed}毫秒")
+    
+    def calculate_average_price(self):
+        """計算加權平均價"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, '選擇要計算均價的數據文件', '', 'CSV文件 (*.csv)')
         
+        if not file_path:
+            return
+            
+        try:
+            # 讀取數據文件
+            df = pd.read_csv(file_path)
+            
+            # 檢查必要欄位
+            if 'Close' not in df.columns or 'Volume' not in df.columns:
+                raise ValueError("數據文件必須包含 Close 和 Volume 欄位")
+            
+            # 計算加權平均價
+            total_value = (df['Close'] * df['Volume']).sum()
+            total_volume = df['Volume'].sum()
+            
+            if total_volume == 0:
+                raise ValueError("總成交量為0，無法計算均價")
+                
+            average_price = total_value / total_volume
+            
+            # 获取Close列的最后一个值
+            last_close = df['Close'].iloc[-1]
+
+            today = df['Date'].iloc[-1].split(' ')[0]
+            
+            # 計算最高價和最低價
+            highest_price = df['Close'].max()
+            lowest_price = df['Close'].min()
+
+            # 顯示結果
+            result_msg = f"{today} 加權平均價計算結果:\n\n"
+            # result_msg += f"Close*Volume 總和: {total_value:.2f}\n"
+            # result_msg += f"Volume 總和: {total_volume:.2f}\n"
+            result_msg += f"加權平均價: {average_price:.2f}\n"
+            result_msg += f"昨收: {last_close} , 昨高: {highest_price}, 昨低: {lowest_price}"
+            
+            # QMessageBox.information(self, "均價計算結果", result_msg)
+            self.log_trade(f"\n[均價計算] {result_msg}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "計算錯誤", f"計算均價時發生錯誤: {str(e)}")
+            self.log_trade(f"\n[均價計算錯誤] {str(e)}")
+    
     def update_price_labels(self, display_df):
         """更新價格標籤"""
         if len(display_df) > 0:
@@ -129,23 +195,27 @@ class KLinePlayer(QMainWindow):
                 artist.remove()
             
             # 添加新標籤
-            self.ax1.text(0.01, 0.95, f'INT: {current_high-current_low:.2f}', 
+            self.ax1.text(0.95, 0.95, f'INT: {current_high-current_low:.2f}', 
                          transform=self.ax1.transAxes, color='orange',
                          bbox=dict(facecolor='white', alpha=0.7))
-            self.ax1.text(0.01, 0.90, f'HIGH: {current_high:.2f}', 
+            self.ax1.text(0.95, 0.90, f'HIGH: {current_high:.2f}', 
                          transform=self.ax1.transAxes, color='red',
                          bbox=dict(facecolor='white', alpha=0.7))
-            self.ax1.text(0.01, 0.85, f'LOW: {current_low:.2f}', 
+            self.ax1.text(0.95, 0.85, f'LOW: {current_low:.2f}', 
                          transform=self.ax1.transAxes, color='green',
                          bbox=dict(facecolor='white', alpha=0.7))
-            self.ax1.text(0.01, 0.80, f'Close: {current_close:.2f}', 
+            self.ax1.text(0.95, 0.80, f'Close: {current_close:.2f}', 
                          transform=self.ax1.transAxes, color='blue',
                          bbox=dict(facecolor='white', alpha=0.7))
-
+            # # 添加速度顯示標籤
+            # self.ax1.text(0.01, 0.80, f'播放速度: {self.speed}ms', 
+            #              transform=self.ax1.transAxes, color='black',
+            #              bbox=dict(facecolor='white', alpha=0.7))
+    
     def load_data(self):
-        # 打開文件對話框選擇數據文件
+        """載入K線數據"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, '選擇股票數據文件', '', 'CSV文件 (*.csv);;Excel文件 (*.xlsx)')
+            self, '選擇股票K線數據文件', '', 'CSV文件 (*.csv);;Excel文件 (*.xlsx)')
         
         if not file_path:
             return
@@ -182,10 +252,14 @@ class KLinePlayer(QMainWindow):
             
             # 顯示初始K線
             self.update_chart()
+            self.log_trade(f"已載入K線數據: {file_path}")
+
+            self.speed_spinbox.setValue(500)
             
         except Exception as e:
-            print(f"載入數據錯誤: {e}")
-            
+            QMessageBox.critical(self, "載入錯誤", f"載入數據時發生錯誤: {str(e)}")
+            self.log_trade(f"\n[載入錯誤] {str(e)}")
+    
     def toggle_play(self):
         if self.df is not None and not self.df.empty:
             self.playing = not self.playing
@@ -195,6 +269,8 @@ class KLinePlayer(QMainWindow):
             else:
                 self.play_btn.setText('開始')
                 self.timer.stop()
+            self.update_chart()
+    
                 
     def next_step(self):
         if self.df is not None and self.current_idx < len(self.df):
@@ -238,7 +314,22 @@ class KLinePlayer(QMainWindow):
                     self.ax1.plot(x_pos, trade_price, 'g^', markersize=10)
                 elif trade['action'] in ('sell', 'sell_short', 'sell_to_close'):
                     self.ax1.plot(x_pos, trade_price, 'rv', markersize=10)
-            
+
+            # 設置時間軸格式
+            for ax in [self.ax1, self.ax2]:
+                # 旋轉刻度標籤
+                ax.tick_params(axis='x', rotation=90)
+
+                # 設置日期格式
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+                # 調整標籤對齊方式
+                for label in ax.get_xticklabels():
+                    label.set_horizontalalignment('right')
+
+            # 自動調整刻度間距
+            self.ax1.xaxis.set_major_locator(mdates.AutoDateLocator())            
+
             self.ax2.set_ylabel('成交量')
             self.figure.subplots_adjust(hspace=0.1)
             self.canvas.draw_idle()
