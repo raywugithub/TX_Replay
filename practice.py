@@ -108,7 +108,7 @@ def find_similar_days():
         similarities.append( (date, total_score, score_details) )  # 存儲完整得分細節
     
     # 按總分排序並取前10
-    sorted_days = sorted(similarities, key=lambda x: x[1], reverse=True)[:10]
+    sorted_days = sorted(similarities, key=lambda x: x[1], reverse=True)[1:50]
     
     # 輸出結果
     print(f"\n目標交易日：{target_date}")
