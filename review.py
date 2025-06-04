@@ -7,8 +7,9 @@ import matplotlib.dates as mdates
 import numpy as np
 
 # 1. 設定路徑
+target_date = input("請輸入目標日期（YYYYMMDD，例如20250519）：").strip()
 download_folder = os.path.join(os.environ['USERPROFILE'], 'Downloads')
-output_csv = os.path.join(download_folder, 'TX_Replay', f"TX_20250528_1K.csv")
+output_csv = os.path.join(download_folder, 'TX_Replay', f"TX_{target_date}_1K.csv")
 
 # 讀取數據時確保正確解析日期
 df_plot = pd.read_csv(output_csv, parse_dates=['Date'])

@@ -1,5 +1,6 @@
 import sys
 import pandas as pd
+import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, 
                              QPushButton, QHBoxLayout, QFileDialog, QLabel, 
                              QTextEdit, QSplitter, QMessageBox, QSpinBox)
@@ -9,19 +10,21 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 
 class KLinePlayer(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('股票K線模擬交易訓練軟體 (含速度調整)')
-        self.setGeometry(100, 100, 1200, 900)
+        self.setWindowTitle('股票K線模擬交易訓練軟體 (含強度指標)')
+        self.setGeometry(100, 100, 1200, 1000)  # 增加高度以容納新指標
         
         # 數據相關變量
         self.df = None
         self.current_idx = 0
         self.playing = False
         self.speed = 500  # 預設播放速度(毫秒)
+        self.has_strength = False  # 是否有強度指標
         
         # 交易相關變量
         self.trades = []
@@ -101,11 +104,14 @@ class KLinePlayer(QMainWindow):
         
         control_panel.setLayout(control_layout)
         
-        # K線圖區域
-        self.figure = Figure(figsize=(12, 6))
+        # K線圖區域 - 增加一個軸用於顯示強度指標
+        self.figure = Figure(figsize=(12, 7))
         self.canvas = FigureCanvas(self.figure)
-        self.ax1 = self.figure.add_subplot(4, 1, (1, 3))
-        self.ax2 = self.figure.add_subplot(4, 1, 4, sharex=self.ax1)
+        
+        # 創建子圖佈局 (5:1:1比例)
+        self.ax1 = self.figure.add_subplot(6, 1, (1, 4))  # K線圖
+        self.ax2 = self.figure.add_subplot(6, 1, 5, sharex=self.ax1)  # 成交量
+        self.ax3 = self.figure.add_subplot(6, 1, 6, sharex=self.ax1)  # 強度指標
         
         # 添加到上部佈局
         top_layout.addWidget(control_panel)
@@ -119,7 +125,7 @@ class KLinePlayer(QMainWindow):
         
         splitter.addWidget(top_widget)
         splitter.addWidget(self.trade_log)
-        splitter.setSizes([700, 200])
+        splitter.setSizes([750, 250])  # 調整比例
         
         main_layout.addWidget(splitter)
         main_widget.setLayout(main_layout)
@@ -211,7 +217,23 @@ class KLinePlayer(QMainWindow):
             # self.ax1.text(0.01, 0.80, f'播放速度: {self.speed}ms', 
             #              transform=self.ax1.transAxes, color='black',
             #              bbox=dict(facecolor='white', alpha=0.7))
-    
+
+            # 如果存在均價欄位，顯示最後均價
+            if 'Average' in display_df.columns:
+                current_avg = display_df.iloc[-1]['Average']
+                self.ax1.text(1.00, 0.75, f'最新均價: {current_avg:.2f}', 
+                             transform=self.ax1.transAxes, color='purple',
+                             bbox=dict(facecolor='white', alpha=0.7))
+            
+            # 如果存在強度欄位，顯示最後強度
+            if self.has_strength:
+                current_strength = display_df.iloc[-1]['strength']
+                # 根據正負值選擇顏色
+                strength_color = 'red' if current_strength >= 0 else 'green'
+                self.ax1.text(1.00, 0.70, f'最新強度: {current_strength:.2f}', 
+                             transform=self.ax1.transAxes, color=strength_color,
+                             bbox=dict(facecolor='white', alpha=0.7))
+
     def load_data(self):
         """載入K線數據"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -232,6 +254,17 @@ class KLinePlayer(QMainWindow):
             for col in required_cols:
                 if col not in self.df.columns:
                     raise ValueError(f"數據文件中缺少必要的列: {col}")
+            
+            # 檢查是否有Average欄位
+            if 'Average' not in self.df.columns:
+                self.log_trade("警告: 數據文件中缺少Average欄位，將無法繪製均價線")
+            
+            # 檢查是否有strength欄位
+            self.has_strength = 'strength' in self.df.columns
+            if self.has_strength:
+                self.log_trade("數據文件中包含strength欄位，將繪製強度指標")
+            else:
+                self.log_trade("警告: 數據文件中缺少strength欄位，將無法繪製強度指標")
                     
             # 重置狀態
             self.current_idx = 0
@@ -271,7 +304,6 @@ class KLinePlayer(QMainWindow):
                 self.timer.stop()
             self.update_chart()
     
-                
     def next_step(self):
         if self.df is not None and self.current_idx < len(self.df):
             self.current_idx += 1
@@ -290,6 +322,8 @@ class KLinePlayer(QMainWindow):
             # 清除圖表
             self.ax1.clear()
             self.ax2.clear()
+            if self.has_strength:
+                self.ax3.clear()
             
             # 繪製K線圖
             mpf.plot(display_df, 
@@ -300,6 +334,38 @@ class KLinePlayer(QMainWindow):
                     datetime_format='%Y-%m-%d %H:%M',
                     show_nontrading=True,
                     axtitle=f'K線重播 (共 {len(self.df)} 根K線, 當前 {self.current_idx} 根)')
+            
+            # 繪製均價線 (如果數據中存在Average欄位)
+            if 'Average' in display_df.columns:
+                self.ax1.plot(display_df.index, display_df['Average'], 
+                             color='purple', linestyle='-', linewidth=1.5, 
+                             label='均價線', alpha=0.7)
+                self.ax1.legend(loc='best')  # 添加圖例
+            
+            # 繪製強度指標 (如果存在)
+            if self.has_strength:
+                # 分離正負值
+                positive = display_df[display_df['strength'] >= 0]
+                negative = display_df[display_df['strength'] < 0]
+
+                # 計算強度值的範圍用於設置y軸
+                strength_min = display_df['strength'].min() * 0.9
+                strength_max = display_df['strength'].max() * 1.1
+                
+                # 繪製柱狀圖
+                if not positive.empty:
+                    self.ax3.bar(positive.index, positive['strength'], 
+                                width=0.0005, color='red', alpha=0.7)
+                if not negative.empty:
+                    self.ax3.bar(negative.index, negative['strength'], 
+                                width=0.0005, color='green', alpha=0.7)
+                
+                # 設置標題和範圍
+                self.ax3.set_ylabel('強度指標')
+                self.ax3.set_ylim(strength_min, strength_max)
+                
+                # 添加零線
+                self.ax3.axhline(0, color='gray', linestyle='-', linewidth=0.5)
             
             # 更新價格標籤
             self.update_price_labels(display_df)
@@ -316,7 +382,7 @@ class KLinePlayer(QMainWindow):
                     self.ax1.plot(x_pos, trade_price, 'rv', markersize=10)
 
             # 設置時間軸格式
-            for ax in [self.ax1, self.ax2]:
+            for ax in [self.ax1, self.ax2, self.ax3]:
                 # 旋轉刻度標籤
                 ax.tick_params(axis='x', rotation=90)
 
@@ -328,10 +394,10 @@ class KLinePlayer(QMainWindow):
                     label.set_horizontalalignment('right')
 
             # 自動調整刻度間距
-            self.ax1.xaxis.set_major_locator(mdates.AutoDateLocator())            
+            self.ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
 
             self.ax2.set_ylabel('成交量')
-            self.figure.subplots_adjust(hspace=0.1)
+            self.figure.subplots_adjust(hspace=0.25)  # 調整子圖間距
             self.canvas.draw_idle()
     
     def buy_action(self):
@@ -359,7 +425,7 @@ class KLinePlayer(QMainWindow):
                     'entry_time': position['entry_time'],
                     'exit_time': self.df.index[self.current_idx-1],
                     'profit_pct': profit_pct,
-                    'profit_points': price_diff  # 新增點數計算
+                    'profit_points': price_diff
                 })
                 
                 self.positions.remove(position)
@@ -406,7 +472,7 @@ class KLinePlayer(QMainWindow):
                     'entry_time': position['entry_time'],
                     'exit_time': self.df.index[self.current_idx-1],
                     'profit_pct': profit_pct,
-                    'profit_points': price_diff  # 新增點數計算
+                    'profit_points': price_diff
                 })
                 
                 self.positions.remove(position)

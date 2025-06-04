@@ -29,6 +29,7 @@ df.columns = new_columns
 
 # 新增strength和Average欄位
 df['strength'] = np.nan
+df['largeorder'] = np.nan
 df['Average'] = np.nan
 
 # 讀取Excel的多空力道和均價數據
@@ -38,16 +39,16 @@ try:
     raw_data = pd.read_excel(
         excel_path,
         sheet_name='FITX_RAW',
-        usecols=['時間', '多空力道', '均價']  # 讀取三個欄位
+        usecols=['時間', '多空力道', '大單', '均價']  # 讀取4個欄位
     )
 except:
     # 如果欄位名稱讀取失敗，改用欄位索引
     raw_data = pd.read_excel(
         excel_path,
         sheet_name='FITX_RAW',
-        usecols="AV, G, B"  # AV欄(時間), G欄(多空力道), B欄(均價)
+        usecols="AV, G, F, B"  # AV欄(時間), G欄(多空力道), F欄(大單), B欄(均價)
     )
-    raw_data.columns = ['時間', '多空力道', '均價']  # 重命名列
+    raw_data.columns = ['時間', '多空力道', '大單', '均價']  # 重命名列
 
 # 處理時間格式
 raw_data['分鐘'] = raw_data['時間'].astype(str).str.extract(r'(\d{2}:\d{2})')[0]
@@ -58,11 +59,17 @@ df['交易分鐘'] = df['Date'].str.split().str[-1]  # 取出空格後的部分
 # 建立分鐘→多空力道的映射字典
 minute_strength_map = raw_data.groupby('分鐘')['多空力道'].first().to_dict()
 
+# 建立分鐘→大單的映射字典
+minute_largeorder_map = raw_data.groupby('分鐘')['大單'].first().to_dict()
+
 # 建立分鐘→均價的映射字典
 minute_average_map = raw_data.groupby('分鐘')['均價'].first().to_dict()
 
 # 映射多空力道
 df['strength'] = df['交易分鐘'].map(minute_strength_map)
+
+# 映射大單
+df['largeorder'] = df['交易分鐘'].map(minute_largeorder_map)
 
 # 映射均價
 df['Average'] = df['交易分鐘'].map(minute_average_map)
@@ -87,9 +94,10 @@ df.to_csv(backup_csv, index=False, encoding='utf-8')
 df_plot = pd.read_csv(output_csv, parse_dates=['Date'], index_col='Date')
 
 try:
-        # 2. 創建顏色映射 - strength指標
+        # 2. 創建顏色映射 - strength,colors_largeorder指標
         # 正值紅色，負值綠色
         colors = ['red' if s >= 0 else 'green' for s in df_plot['strength']]
+        colors_largeorder = ['red' if s >= 0 else 'green' for s in df_plot['largeorder']]
 
         # 3. 創建額外的圖表面板
         apds = [
@@ -101,7 +109,10 @@ try:
             mpf.make_addplot(df_plot['Volume'], panel=1, type='bar', color='blue', ylabel='Volume'),
         
             # strength指標直方圖（在面板2）
-            mpf.make_addplot(df_plot['strength'], panel=2, type='bar', color=colors, ylabel='Strength')
+            mpf.make_addplot(df_plot['strength'], panel=2, type='bar', color=colors, ylabel='Strength'),
+
+            # largeorder指標直方圖（在面板3）
+            mpf.make_addplot(df_plot['largeorder'], panel=3, type='bar', color=colors_largeorder, ylabel='Largeorder'),
         ]
         # 4. 繪製圖表
         fig, axes = mpf.plot(
@@ -114,10 +125,10 @@ try:
             title=f'TX Futures 1-min K-line ({today_date})',
             ylabel='Price',
             style='yahoo',
-            panel_ratios=(3, 1, 1),  # 主圖:成交量:strength = 3:1:1
+            panel_ratios=(3, 1, 1, 1),  # 主圖:成交量:strength:largeorder = 3:1:1:1
             returnfig=True
         )
-except:
+except Exception as e:
         # 3. 創建額外的圖表面板
         apds = [
             # 均價線（在主圖面板）
@@ -142,6 +153,7 @@ except:
             panel_ratios=(3, 1),  # 主圖:成交量 = 3:1
             returnfig=True
         )
+        print(f"發生錯誤：{e}")
 
 # 5. 設置日期格式
 axes[0].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))

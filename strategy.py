@@ -37,7 +37,7 @@ def load_data(start_date, end_date, data_folder='.'):
     
     return data_dict
 
-# 模組2: 條件判斷函數 (新增時段分析條件)
+# 模組2: 條件判斷函數 (重新設計高低點計算)
 class ConditionChecker:
     """條件檢查器，包含單K棒條件和整日條件"""
     
@@ -155,9 +155,9 @@ class ConditionChecker:
     @staticmethod
     def day_time_segment_ratio(day_df):
         """
-        分析三個時段的價格在平均線上下的時間比例
+        分析三個時段的價格在平均線上下的時間比例，並計算高低點
         :param day_df: 整日資料DataFrame
-        :return: dict, 包含各時段的時間比例
+        :return: (是否符合, 特徵字典)
         """
         # 確保數據按時間排序
         day_df = day_df.sort_values('DateTime')
@@ -172,6 +172,10 @@ class ConditionChecker:
         
         results = {}
         
+        # 存儲各時段的高低點
+        segment_highs = {}
+        segment_lows = {}
+        
         for segment in segments:
             # 篩選出時段內的數據
             seg_df = day_df[(day_df['Time'] >= segment['start']) & 
@@ -181,11 +185,21 @@ class ConditionChecker:
                 results[f"{segment['name']}_ratio"] = np.nan
                 results[f"{segment['name']}_start_close"] = np.nan
                 results[f"{segment['name']}_end_close"] = np.nan
+                results[f"{segment['name']}_high"] = np.nan
+                results[f"{segment['name']}_low"] = np.nan
                 continue
             
             # 獲取時段開始和結束的收盤價
             start_close = seg_df.iloc[0]['Close']
             end_close = seg_df.iloc[-1]['Close']
+            
+            # 計算時段內最高價和最低價
+            seg_high = seg_df['High'].max()
+            seg_low = seg_df['Low'].min()
+            
+            # 存儲高低點用於後續分析
+            segment_highs[segment['name']] = seg_high
+            segment_lows[segment['name']] = seg_low
             
             # 根據價格變化方向決定計算方式
             if end_close >= start_close:
@@ -201,6 +215,18 @@ class ConditionChecker:
             results[f"{segment['name']}_ratio"] = ratio
             results[f"{segment['name']}_start_close"] = start_close
             results[f"{segment['name']}_end_close"] = end_close
+            results[f"{segment['name']}_high"] = seg_high
+            results[f"{segment['name']}_low"] = seg_low
+        
+        # 計算全日最高點和最低點
+        daily_high = max(segment_highs.values())
+        daily_low = min(segment_lows.values())
+        
+        # 計算收盤時段是否創全日最高點
+        results['final_high_is_daily_high'] = segment_highs['final_trade'] == daily_high
+        
+        # 計算收盤時段是否創全日最低點
+        results['final_low_is_daily_low'] = segment_lows['final_trade'] == daily_low
         
         return True, results  # 總是返回True，因為我們需要這些特徵值
 
@@ -300,7 +326,7 @@ def scan_conditions(data_dict, intraday_config=None, daily_config=None):
 # 更新模組4: 時段比例統計分析 (加入價格變動維度)
 def analyze_segment_probability(daily_results, output_folder='.'):
     """
-    分析三个时段的比例组合概率，并加入价格变动维度
+    分析三个时段的比例组合概率，包含高低点分析
     :param daily_results: 整日结果列表
     :param output_folder: 输出目录
     :return: 组合概率DataFrame
@@ -314,13 +340,15 @@ def analyze_segment_probability(daily_results, output_folder='.'):
     
     # 确保有需要的字段
     required_columns = ['date', 'first_trade_ratio', 'second_trade_ratio', 'final_trade_ratio',
-                        'first_trade_start_close', 'first_trade_end_close',
-                        'second_trade_start_close', 'second_trade_end_close',
-                        'final_trade_start_close', 'final_trade_end_close']
-    for col in required_columns:
-        if col not in df.columns:
-            print(f"缺少必要字段: {col}")
-            return None
+                        'first_trade_start_close', 'first_trade_end_close', 'first_trade_high', 'first_trade_low',
+                        'second_trade_start_close', 'second_trade_end_close', 'second_trade_high', 'second_trade_low',
+                        'final_trade_start_close', 'final_trade_end_close', 'final_trade_high', 'final_trade_low',
+                        'final_high_is_daily_high', 'final_low_is_daily_low']
+    
+    missing_cols = [col for col in required_columns if col not in df.columns]
+    if missing_cols:
+        print(f"缺少必要字段: {', '.join(missing_cols)}")
+        return None
     
     print("\n开始分析时段比例组合概率...")
     
@@ -355,12 +383,16 @@ def analyze_segment_probability(daily_results, output_folder='.'):
         lambda x: classify_price_change(x['second_trade_start_close'], x['second_trade_end_close']), axis=1)
     df['final_trade_change'] = df.apply(
         lambda x: classify_price_change(x['final_trade_start_close'], x['final_trade_end_close']), axis=1)
-    
-    # 创建组合列 (比例分类 + 价格变动)
+
+    # 创建组合列 (比例分类 + 价格变动 + 高低点特征)
     df['combination'] = df.apply(
-        lambda x: f"{x['first_trade_class']}_{x['first_trade_change']}_" +
-                  f"{x['second_trade_class']}_{x['second_trade_change']}_" +
-                  f"{x['final_trade_class']}_{x['final_trade_change']}", 
+        lambda x: (
+            f"{x['first_trade_class']}_{x['first_trade_change']}_"
+            f"{x['second_trade_class']}_{x['second_trade_change']}_"
+            f"{x['final_trade_class']}_{x['final_trade_change']}_"
+            f"{'H' if x['final_high_is_daily_high'] else 'Nh'}_"
+            f"{'L' if x['final_low_is_daily_low'] else 'Nl'}"
+        ), 
         axis=1
     )
     
@@ -388,6 +420,12 @@ def analyze_segment_probability(daily_results, output_folder='.'):
     combo_counts['final_trade_description'] = combo_counts['combination'].apply(
         lambda x: f"{x.split('_')[4]}({x.split('_')[5]})")
     
+    # 添加高低点特征描述
+    combo_counts['high_point'] = combo_counts['combination'].apply(
+        lambda x: "创全日最高" if x.split('_')[6] == 'H' else "未创全日最高")
+    combo_counts['low_point'] = combo_counts['combination'].apply(
+        lambda x: "创全日最低" if x.split('_')[7] == 'L' else "未创全日最低")
+    
     # 创建日期字符串列 (用于显示)
     combo_counts['date_list'] = combo_counts['dates'].apply(lambda x: ", ".join(x))
     
@@ -412,15 +450,22 @@ def analyze_segment_probability(daily_results, output_folder='.'):
     combo_daily_change = df.groupby('combination')['daily_change'].mean().reset_index()
     combo_daily_change.columns = ['combination', 'avg_daily_change']
     combo_counts = pd.merge(combo_counts, combo_daily_change, on='combination', how='left')
-    
+
+    # 计算高低点特征的概率
+    high_is_daily_prob = df['final_high_is_daily_high'].mean()
+    low_is_daily_prob = df['final_low_is_daily_low'].mean()
+
     # 排序并重置索引
     combo_counts = combo_counts.sort_values('probability', ascending=False).reset_index(drop=True)
     
     # 输出结果
-    print("\n时段比例与价格变动组合概率统计:")
+    print("\n时段比例与价格变动组合概率统计 (含高低点分析):")
     print(combo_counts[['first_trade_description', 'second_trade_description', 
-                        'final_trade_description', 'count', 'probability', 
-                        'avg_daily_change']])
+                        'final_trade_description', 'high_point', 'low_point',
+                        'count', 'probability', 'avg_daily_change']])
+    
+    print(f"\n收盘时段创全日最高点的概率: {high_is_daily_prob:.2%}")
+    print(f"收盘时段创全日最低点的概率: {low_is_daily_prob:.2%}")
     
     # 保存到CSV
     output_file = os.path.join(output_folder, "segment_probability_analysis.csv")
@@ -428,6 +473,7 @@ def analyze_segment_probability(daily_results, output_folder='.'):
     save_columns = [
         'combination', 'count', 'probability', 'dates', 'date_list',
         'first_trade_description', 'second_trade_description', 'final_trade_description',
+        'high_point', 'low_point',
         'avg_first_change', 'avg_second_change', 'avg_final_change', 'avg_daily_change'
     ]
     combo_counts[save_columns].to_csv(output_file, index=False)
@@ -435,11 +481,16 @@ def analyze_segment_probability(daily_results, output_folder='.'):
     
     # 保存详细日期文件
     detailed_file = os.path.join(output_folder, "segment_detailed_dates.csv")
-    df[['date', 
-        'first_trade_class', 'first_trade_change',
-        'second_trade_class', 'second_trade_change',
-        'final_trade_class', 'final_trade_change', 
-        'combination']].to_csv(detailed_file, index=False)
+    # 选择要保存的详细字段
+    detailed_columns = [
+        'date', 
+        'first_trade_class', 'first_trade_change', 'first_trade_high', 'first_trade_low',
+        'second_trade_class', 'second_trade_change', 'second_trade_high', 'second_trade_low',
+        'final_trade_class', 'final_trade_change', 'final_trade_high', 'final_trade_low',
+        'final_high_is_daily_high', 'final_low_is_daily_low',
+        'combination'
+    ]
+    df[detailed_columns].to_csv(detailed_file, index=False)
     print(f"详细日期分类已保存至: {detailed_file}")
 
     # import matplotlib.pyplot as plt
@@ -460,7 +511,9 @@ def main():
     # 參數配置
     data_folder = '.'  # 當前目錄
     start_date = '20230801'  # 起始日期
-    end_date = '20250602'   # 結束日期
+    # end_date = '20250603'   # 結束日期
+    today_date = datetime.today().strftime('%Y%m%d')
+    end_date = str(today_date)
     
     # 條件配置
     intraday_config = [
@@ -517,10 +570,10 @@ def main():
         daily_df.to_csv(output_file, index=False)
         print(f"整日結果已保存至: {output_file}")
         
-        # 顯示時段比例結果
-        print("\n時段比例分析結果:")
-        segment_columns = [col for col in daily_df.columns if 'ratio' in col]
-        print(daily_df[['date'] + segment_columns])
+        # # 顯示時段比例結果
+        # print("\n時段比例分析結果:")
+        # segment_columns = [col for col in daily_df.columns if 'ratio' in col]
+        # print(daily_df[['date'] + segment_columns])
         
         # 新增: 执行時段比例組合概率分析
         analyze_segment_probability(daily_results, output_folder=data_folder)
