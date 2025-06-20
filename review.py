@@ -67,13 +67,15 @@ def on_mouse_move(event):
 try:
     # 2. 創建顏色映射 - strength指標
     colors = ['red' if s >= 0 else 'green' for s in df_plot['strength']]
+    colors_largeorder = ['red' if s >= 0 else 'green' for s in df_plot['largeorder']]
 
     # 3. 創建額外的圖表面板
     apds = [
         mpf.make_addplot(df_plot['Average'], panel=0, type='line', color='purple', 
                         width=1.5, alpha=0.8, linestyle='-', label='Average'),
         mpf.make_addplot(df_plot['Volume'], panel=1, type='bar', color='blue', ylabel='Volume'),
-        mpf.make_addplot(df_plot['strength'], panel=2, type='bar', color=colors, ylabel='Strength')
+        mpf.make_addplot(df_plot['strength'], panel=2, type='bar', color=colors, ylabel='Strength'),
+        mpf.make_addplot(df_plot['largeorder'], panel=3, type='bar', color=colors_largeorder, ylabel='Largeorder'),
     ]
     
     # 4. 繪製圖表
@@ -87,7 +89,7 @@ try:
         title='TX Futures 1-min K-line',
         ylabel='Price',
         style='yahoo',
-        panel_ratios=(3, 1, 1),
+        panel_ratios=(3, 1, 1, 1),
         datetime_format='%H:%M',
         returnfig=True
     )

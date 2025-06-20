@@ -30,6 +30,7 @@ df.columns = new_columns
 # 新增strength和Average欄位
 df['strength'] = np.nan
 df['largeorder'] = np.nan
+df['score'] = np.nan
 df['Average'] = np.nan
 
 # 讀取Excel的多空力道和均價數據
@@ -39,16 +40,16 @@ try:
     raw_data = pd.read_excel(
         excel_path,
         sheet_name='FITX_RAW',
-        usecols=['時間', '多空力道', '大單', '均價']  # 讀取4個欄位
+        usecols=['時間', '多空力道', '大單', '多空分數', '均價']  # 讀取5個欄位
     )
 except:
     # 如果欄位名稱讀取失敗，改用欄位索引
     raw_data = pd.read_excel(
         excel_path,
         sheet_name='FITX_RAW',
-        usecols="AV, G, F, B"  # AV欄(時間), G欄(多空力道), F欄(大單), B欄(均價)
+        usecols="AV, G, F, LT, B"  # AV欄(時間), G欄(多空力道), F欄(大單), LT欄(多空分數), B欄(均價)
     )
-    raw_data.columns = ['時間', '多空力道', '大單', '均價']  # 重命名列
+    raw_data.columns = ['時間', '多空力道', '大單', '多空分數', '均價']  # 重命名列
 
 # 處理時間格式
 raw_data['分鐘'] = raw_data['時間'].astype(str).str.extract(r'(\d{2}:\d{2})')[0]
@@ -62,6 +63,9 @@ minute_strength_map = raw_data.groupby('分鐘')['多空力道'].first().to_dict
 # 建立分鐘→大單的映射字典
 minute_largeorder_map = raw_data.groupby('分鐘')['大單'].first().to_dict()
 
+# 建立分鐘→多空分數的映射字典
+minute_score_map = raw_data.groupby('分鐘')['多空分數'].first().to_dict()
+
 # 建立分鐘→均價的映射字典
 minute_average_map = raw_data.groupby('分鐘')['均價'].first().to_dict()
 
@@ -70,6 +74,9 @@ df['strength'] = df['交易分鐘'].map(minute_strength_map)
 
 # 映射大單
 df['largeorder'] = df['交易分鐘'].map(minute_largeorder_map)
+
+# 映射多空分數
+df['score'] = df['交易分鐘'].map(minute_score_map)
 
 # 映射均價
 df['Average'] = df['交易分鐘'].map(minute_average_map)

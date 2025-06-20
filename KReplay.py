@@ -221,7 +221,7 @@ class KLinePlayer(QMainWindow):
             # 如果存在均價欄位，顯示最後均價
             if 'Average' in display_df.columns:
                 current_avg = display_df.iloc[-1]['Average']
-                self.ax1.text(1.00, 0.75, f'最新均價: {current_avg:.2f}', 
+                self.ax1.text(1.00, 0.75, f'Average: {current_avg:.2f}', 
                              transform=self.ax1.transAxes, color='purple',
                              bbox=dict(facecolor='white', alpha=0.7))
             
@@ -230,7 +230,7 @@ class KLinePlayer(QMainWindow):
                 current_strength = display_df.iloc[-1]['strength']
                 # 根據正負值選擇顏色
                 strength_color = 'red' if current_strength >= 0 else 'green'
-                self.ax1.text(1.00, 0.70, f'最新強度: {current_strength:.2f}', 
+                self.ax1.text(1.00, 0.70, f'strength: {current_strength:.2f}', 
                              transform=self.ax1.transAxes, color=strength_color,
                              bbox=dict(facecolor='white', alpha=0.7))
 
@@ -333,13 +333,13 @@ class KLinePlayer(QMainWindow):
                     style=self.mp_style,
                     datetime_format='%Y-%m-%d %H:%M',
                     show_nontrading=True,
-                    axtitle=f'K線重播 (共 {len(self.df)} 根K線, 當前 {self.current_idx} 根)')
+                    axtitle=f'K-Replay (Total {len(self.df)}, Now {self.current_idx}th)')
             
             # 繪製均價線 (如果數據中存在Average欄位)
             if 'Average' in display_df.columns:
                 self.ax1.plot(display_df.index, display_df['Average'], 
-                             color='purple', linestyle='-', linewidth=1.5, 
-                             label='均價線', alpha=0.7)
+                             color='purple', linestyle='-', linewidth=1.5, alpha=0.7)
+                             # label='Average', alpha=0.7)
                 self.ax1.legend(loc='best')  # 添加圖例
             
             # 繪製強度指標 (如果存在)
@@ -361,7 +361,7 @@ class KLinePlayer(QMainWindow):
                                 width=0.0005, color='green', alpha=0.7)
                 
                 # 設置標題和範圍
-                self.ax3.set_ylabel('強度指標')
+                self.ax3.set_ylabel('strength')
                 self.ax3.set_ylim(strength_min, strength_max)
                 
                 # 添加零線
@@ -396,7 +396,7 @@ class KLinePlayer(QMainWindow):
             # 自動調整刻度間距
             self.ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
 
-            self.ax2.set_ylabel('成交量')
+            self.ax2.set_ylabel('Volume')
             self.figure.subplots_adjust(hspace=0.25)  # 調整子圖間距
             self.canvas.draw_idle()
     
