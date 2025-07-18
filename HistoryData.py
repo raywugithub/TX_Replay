@@ -38,6 +38,12 @@ def split_csv_by_date(input_file):
 
 # 使用範例
 if __name__ == "__main__":
-    input_file = "TX00_台指近_分鐘線.csv"  # 替換為你的實際檔案名
+    # 1. 設定路徑
+    download_folder = os.path.join(os.environ['USERPROFILE'], 'Downloads')
+    today_date = datetime.today().strftime('%Y%m%d')
+
+    # 2. 讀取原始CSV文件（包含欄位名稱）
+    input_file = os.path.join(download_folder, "TX00_台指近_分鐘線.csv")
+
     split_csv_by_date(input_file)
     print("檔案分割完成！")

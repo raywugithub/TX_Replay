@@ -27,7 +27,7 @@ def process_files():
     
     # 設定日期範圍
     end_date = datetime.now()
-    start_date = datetime(2023, 8, 1)
+    start_date = datetime(2025, 6, 1)
     
     # 生成所有可能的日期
     date_list = []

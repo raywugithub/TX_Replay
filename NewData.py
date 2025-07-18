@@ -33,23 +33,23 @@ df['largeorder'] = np.nan
 df['score'] = np.nan
 df['Average'] = np.nan
 
-# 讀取Excel的多空力道和均價數據
-excel_path = os.path.join(download_folder, f"日_看盤_群益_{today_date}.xlsx")
+# 讀取CSV的多空力道和均價數據
+csv_path = os.path.join(download_folder, f"日_看盤_群益_{today_date}_FITX_RAW.csv")
 try:
-    # 嘗試使用欄位名稱讀取
-    raw_data = pd.read_excel(
-        excel_path,
-        sheet_name='FITX_RAW',
-        usecols=['時間', '多空力道', '大單', '多空分數', '均價']  # 讀取5個欄位
+    # 從CSV讀取資料，並指定編碼為 'utf-8-sig' 來處理BOM
+    raw_data = pd.read_csv(
+        csv_path,
+        encoding='utf-8-sig',
+        usecols=['時間', '多空力道', '大單', '多空分數', '均價']  # 讀取指定的5個欄位
     )
-except:
-    # 如果欄位名稱讀取失敗，改用欄位索引
-    raw_data = pd.read_excel(
-        excel_path,
-        sheet_name='FITX_RAW',
-        usecols="AV, G, F, LT, B"  # AV欄(時間), G欄(多空力道), F欄(大單), LT欄(多空分數), B欄(均價)
-    )
-    raw_data.columns = ['時間', '多空力道', '大單', '多空分數', '均價']  # 重命名列
+except FileNotFoundError:
+    print(f"錯誤：找不到資料來源檔案 {csv_path}")
+    # 建立一個空的DataFrame，避免後續程式碼出錯
+    raw_data = pd.DataFrame(columns=['時間', '多空力道', '大單', '多空分數', '均價'])
+except Exception as e:
+    print(f"讀取 {csv_path} 時發生錯誤: {e}")
+    # 發生其他錯誤時，同樣建立空DataFrame
+    raw_data = pd.DataFrame(columns=['時間', '多空力道', '大單', '多空分數', '均價'])
 
 # 處理時間格式
 raw_data['分鐘'] = raw_data['時間'].astype(str).str.extract(r'(\d{2}:\d{2})')[0]
