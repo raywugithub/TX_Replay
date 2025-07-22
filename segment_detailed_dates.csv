@@ -476,3 +476,5 @@ date,first_trade_class,first_trade_change,first_trade_high,first_trade_low,secon
 20250716,High,Up,22962.0,22845.0,High,Up,23015.0,22944.0,High,Up,23116.0,23006.0,True,False,High_Up_High_Up_High_Up_H_Nl
 20250717,High,Up,23029.0,22911.0,Medium,Down,23024.0,22866.0,Medium,Up,23150.0,22915.0,True,False,High_Up_Medium_Down_Medium_Up_H_Nl
 20250718,Medium,Down,23399.0,23305.0,High,Down,23360.0,23261.0,High,Down,23320.0,23230.0,False,True,Medium_Down_High_Down_High_Down_Nh_L
+20250721,Low,Down,23301.0,23172.0,Low,Flat,23253.0,23180.0,Low,Up,23280.0,23189.0,False,False,Low_Down_Low_Flat_Low_Up_Nh_Nl
+20250722,High,Up,23373.0,23205.0,Low,Down,23406.0,23315.0,Medium,Down,23377.0,22981.0,False,True,High_Up_Low_Down_Medium_Down_Nh_L

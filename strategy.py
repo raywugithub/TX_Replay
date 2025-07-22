@@ -518,7 +518,6 @@ def main():
     # 參數配置
     data_folder = '.'  # 當前目錄
     start_date = '20230801'  # 起始日期
-    # end_date = '20250603'   # 結束日期
     today_date = datetime.today().strftime('%Y%m%d')
     end_date = str(today_date)
     
